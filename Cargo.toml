@@ -1,0 +1,12 @@
+[package]
+name = "nitf-viz"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.21"
+simple_logger = "4.3.3"
+image = { version = "0.25.0", features = ["gif"] }
+clap = { version = "4.5.3", features = ["derive"]}
+nitf-rs = {git = "https://github.com/holmesv3/nitf-rs"}
+memmap2 = "0.5.10"
