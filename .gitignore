@@ -1,3 +1,6 @@
 /target
-/examples
 Cargo.lock
+
+*.nitf
+*.png
+*.gif
