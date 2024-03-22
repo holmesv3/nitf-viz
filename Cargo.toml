@@ -2,6 +2,9 @@
 name = "nitf-viz"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+license-file = "LICENSE"
+readme = "README.md"
 
 [dependencies]
 log = "0.4.21"

@@ -3,6 +3,7 @@ use nitf_rs::headers::image_hdr::{
     PixelValueType, 
     ImageRepresentation,
     ImageRepresentationBand,
+    Mode,
     Band, 
     
 };
@@ -36,6 +37,7 @@ fn main() {
     rgb_header.nbpp.val = 24;
     rgb_header.abpp.val = 24;
     rgb_header.nbands.val = 3;
+    rgb_header.imode.val = Mode::P;
     rgb_header.icat.val = "VIS".to_string();
     let mut red_band = Band::default();
     red_band.irepband.val = ImageRepresentationBand::R;
