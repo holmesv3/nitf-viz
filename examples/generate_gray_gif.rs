@@ -1,14 +1,8 @@
-use nitf_rs::{Nitf, ImageSegment};
-use nitf_rs::headers::image_hdr::{
-    PixelValueType, 
-    ImageRepresentation,
-    ImageRepresentationBand,
-    Mode,
-    Band, 
-    
-};
 use image::{ImageBuffer, Luma};
-
+use nitf_rs::headers::image_hdr::{
+    Band, ImageRepresentation, ImageRepresentationBand, Mode, PixelValueType,
+};
+use nitf_rs::{ImageSegment, Nitf};
 
 fn main() {
     // Make a grayscale image
@@ -24,7 +18,7 @@ fn main() {
             frame_1.put_pixel(row, col, Luma([u8::MAX]));
         }
     }
-    
+
     let mut frame_2 = ImageBuffer::new(dim, dim);
     for row in 0..(dim / 2) {
         for col in 0..(dim / 2) {
@@ -49,16 +43,20 @@ fn main() {
     gray_header.nbpp.val = 8;
     gray_header.abpp.val = 8;
     gray_header.nbands.val = 1;
-    gray_header.imode.val = Mode::S;
+    gray_header.imode.val = Mode::B;
     gray_header.icat.val = "VIS".to_string();
     let mut gray_band = Band::default();
     gray_band.irepband.val = ImageRepresentationBand::M;
     gray_header.bands = vec![gray_band];
-    
+
     gray_nitf.add_im(gray_segment.clone());
     gray_nitf.add_im(gray_segment);
     let mut gray_file = std::fs::File::create("examples/gray_gif.nitf").unwrap();
     gray_nitf.write_headers(&mut gray_file).unwrap();
-    gray_nitf.image_segments[0].write_data(&mut gray_file, &frame_1.into_raw()).unwrap();
-    gray_nitf.image_segments[1].write_data(&mut gray_file, &frame_2.into_raw()).unwrap();
+    gray_nitf.image_segments[0]
+        .write_data(&mut gray_file, &frame_1.into_raw())
+        .unwrap();
+    gray_nitf.image_segments[1]
+        .write_data(&mut gray_file, &frame_2.into_raw())
+        .unwrap();
 }

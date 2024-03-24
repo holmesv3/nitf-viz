@@ -1,18 +1,12 @@
-use nitf_rs::{Nitf, ImageSegment};
-use nitf_rs::headers::image_hdr::{
-    PixelValueType, 
-    ImageRepresentation,
-    ImageRepresentationBand,
-    Mode,
-    Band, 
-    
-};
 use image::{ImageBuffer, Rgb};
-
+use nitf_rs::headers::image_hdr::{
+    Band, ImageRepresentation, ImageRepresentationBand, Mode, PixelValueType,
+};
+use nitf_rs::{ImageSegment, Nitf};
 
 fn main() {
     let dim = 2_u32.pow(8);
-    
+
     let mut rgb = ImageBuffer::new(dim, dim);
     for row in 0..(dim / 2) {
         for col in (dim / 2)..dim {
@@ -46,9 +40,11 @@ fn main() {
     let mut blue_band = Band::default();
     blue_band.irepband.val = ImageRepresentationBand::B;
     rgb_header.bands = vec![red_band, green_band, blue_band];
-    
+
     rgb_nitf.add_im(rgb_segment);
     let mut rgb_file = std::fs::File::create("examples/rgb.nitf").unwrap();
     rgb_nitf.write_headers(&mut rgb_file).unwrap();
-    rgb_nitf.image_segments[0].write_data(&mut rgb_file, &rgb.into_raw()).unwrap();
+    rgb_nitf.image_segments[0]
+        .write_data(&mut rgb_file, &rgb.into_raw())
+        .unwrap();
 }
