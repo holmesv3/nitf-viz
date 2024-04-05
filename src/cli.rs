@@ -31,7 +31,7 @@ impl From<Level> for LevelFilter {
         }
     }
 }
-/// Write out the image data from a NITF file. Supported formats:
+/// Write out the image data from a NITF file.
 #[derive(Parser, Debug)]
 pub struct Cli {
     /// Input file
@@ -58,12 +58,12 @@ pub struct Cli {
     /// Enable logging for nitf reading
     #[arg(long, action)]
     pub nitf_log: bool,
-    
-    // Manual brightness adjustment (i32)
+
+    /// Manual brightness adjustment (i32)
     #[arg(short, long, default_value = "0")]
     pub brightness: i32,
-    
-    // Manual contrast adjustment (f32)
+
+    /// Manual contrast adjustment (f32)
     #[arg(short, long, default_value = "0")]
-    pub contrast: f32
+    pub contrast: f32,
 }
