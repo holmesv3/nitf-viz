@@ -1,10 +1,12 @@
 //! Definition of image reading/writing logic
 use core::slice;
 use image::{
-    codecs::gif::{GifEncoder, Repeat}, imageops::{
+    codecs::gif::{GifEncoder, Repeat},
+    imageops::{
         colorops::{brighten_in_place, contrast_in_place},
         thumbnail,
-    }, Frame, Rgba, RgbaImage
+    },
+    Frame, Rgba, RgbaImage,
 };
 use log::{debug, error, info, trace};
 use memmap2::Mmap;
@@ -46,10 +48,6 @@ pub struct ImageWrapper {
     pub nppbh: u16,
     /// Number of Pixels Per Block Vertical
     pub nppbv: u16,
-    /// Output brightness adjustment
-    pub brightness: i32,
-    /// Output contrast adjustment
-    pub contrast: f32,
     data: Mmap,
     remap: Option<Pedf>,
 }
@@ -64,24 +62,28 @@ struct BlockInfo {
 
 impl ImageWrapper {
     fn read_image(&self) -> VizResult<RgbaImage> {
-        
-        
         if self.nbpp % 8 != 0 {
             return Err(VizError::Nbpp);
         }
-        
+
         let block_height = self.nppbv as u32;
         let block_width = self.nppbh as u32;
         let block_per_row = self.nbpr as u32;
         let block_per_col = self.nbpc as u32;
-        
+
         let ncols = {
-            if block_per_row < 1 {block_per_row * block_width}
-            else {self.ncols}
+            if block_per_row < 1 {
+                block_per_row * block_width
+            } else {
+                self.ncols
+            }
         };
         let nrows = {
-            if block_per_col < 1 {block_per_col * block_height}
-            else {self.nrows}
+            if block_per_col < 1 {
+                block_per_col * block_height
+            } else {
+                self.nrows
+            }
         };
 
         let mut image = RgbaImage::new(ncols, nrows);
@@ -98,8 +100,8 @@ impl ImageWrapper {
             // self.pedf(&mut image)?;
             return Ok(image);
         }
-        let byte_per_px = (self.nbpp / 8) as u32;       
-        
+        let byte_per_px = (self.nbpp / 8) as u32;
+
         let n_block = block_per_row * block_per_col;
         let mut block_info = vec![BlockInfo::default(); n_block as usize];
         for i_y in 0..block_per_col {
@@ -189,41 +191,46 @@ impl ImageWrapper {
         if self.nbpp != 8 {
             return Err(VizError::Nbpp);
         };
-        
-        self.data.par_iter()
+
+        self.data
+            .par_iter()
             .zip(image.par_pixels_mut())
             .for_each(|(data, px)| *px = Rgba([*data, *data, *data, u8::MAX]));
-        
-        
-        if self.brightness != 0 {
-            debug!("Adjusting brightness");
-            brighten_in_place(image, self.brightness);
-        }
-        if self.contrast != 0.0 {
-            debug!("Adjusting contrast");
-            contrast_in_place(image, self.contrast);
-        }
+
         Ok(())
     }
-    
+
     /// Read an mono represented image. Currently assumes all data is a single byte
-    fn blocked_read_mono(&self, data: &[u8], block: &BlockInfo, image: &mut RgbaImage) -> VizResult<()> {
+    fn blocked_read_mono(
+        &self,
+        data: &[u8],
+        block: &BlockInfo,
+        image: &mut RgbaImage,
+    ) -> VizResult<()> {
+        // Make values outside of "significant" image data transparent
+        let alpha = |x: u32, y: u32| {
+            if x >= self.ncols || y >= self.nrows {
+                u8::MIN
+            } else {
+                u8::MAX
+            }
+        };
+
         if self.nbpp != 8 {
             return Err(VizError::Nbpp);
         };
-        
+
         let mut block_iter = vec![(0_u32, 0_u32); (block.width * block.height) as usize];
         for (i_y, y) in (block.y..(block.y + block.height)).enumerate() {
             for (i_x, x) in (block.x..(block.x + block.width)).enumerate() {
                 block_iter[i_x + i_y * block.width as usize] = (x, y)
             }
         }
-        
+
         let block_iter = block_iter.iter().cloned();
-            for (data, (x, y)) in data.iter().zip(block_iter)
-            {
-                image.put_pixel(x, y, Rgba([*data, *data, *data, u8::MAX]));
-            }
+        for (data, (x, y)) in data.iter().zip(block_iter) {
+            image.put_pixel(x, y, Rgba([*data, *data, *data, alpha(x, y)]));
+        }
 
         Ok(())
     }
@@ -234,18 +241,11 @@ impl ImageWrapper {
             return Err(VizError::Nbpp);
         }
 
-        self.data.par_chunks(3)
+        self.data
+            .par_chunks(3)
             .zip(image.par_pixels_mut())
             .for_each(|(data, px)| *px = Rgba([data[0], data[1], data[2], u8::MAX]));
 
-        if self.brightness != 0 {
-            debug!("Adjusting brightness");
-            brighten_in_place(image, self.brightness);
-        }
-        if self.contrast != 0.0 {
-            debug!("Adjusting contrast");
-            contrast_in_place(image, self.contrast);
-        }
         Ok(())
     }
 
@@ -256,20 +256,13 @@ impl ImageWrapper {
         }
         let (r, g, b) = (0, 1, 2);
         let lut = &self.bands[0].lutd;
-        self.data.par_iter()
+        self.data
+            .par_iter()
             .zip(image.par_pixels_mut())
             .for_each(|(data, px)| {
                 let idx = *data as usize;
                 *px = Rgba([lut[r][idx], lut[g][idx], lut[b][idx], u8::MAX]);
             });
-        if self.brightness != 0 {
-            debug!("Adjusting brightness");
-            brighten_in_place(image, self.brightness);
-        }
-        if self.contrast != 0.0 {
-            debug!("Adjusting contrast");
-            contrast_in_place(image, self.contrast);
-        }
         Ok(())
     }
 
@@ -295,14 +288,6 @@ impl ImageWrapper {
             });
 
         debug!("Done remapping");
-        if self.brightness != 0 {
-            debug!("Adjusting brightness");
-            brighten_in_place(image, self.brightness);
-        }
-        if self.contrast != 0.0 {
-            debug!("Adjusting contrast");
-            contrast_in_place(image, self.contrast);
-        }
         Ok(())
     }
 }
@@ -322,12 +307,25 @@ pub struct Handler {
     pub size: u32,
     /// Images
     pub wrappers: Vec<ImageWrapper>,
+    /// Output brightness adjustment
+    pub brightness: i32,
+    /// Output contrast adjustment
+    pub contrast: f32,
 }
 
 /// Takes care of all reading, parsing, and writing work
 impl Handler {
     fn get_image(&self, i_seg: usize) -> VizResult<RgbaImage> {
-        self.wrappers[i_seg].get_image(self.size)
+        let mut image = self.wrappers[i_seg].get_image(self.size)?;
+        if self.brightness != 0 {
+            debug!("Adjusting brightness");
+            brighten_in_place(&mut image, self.brightness);
+        }
+        if self.contrast != 0.0 {
+            debug!("Adjusting contrast");
+            contrast_in_place(&mut image, self.contrast);
+        }
+        Ok(image)
     }
     pub fn single_segment(&self, i_seg: usize, stem: &str) -> VizResult<()> {
         let out_file = self.out_dir.join(format!("{}_{}.png", stem, self.size));
@@ -410,8 +408,6 @@ impl TryFrom<&Cli> for Handler {
                     nppbh: meta.nppbh.val,
                     nppbv: meta.nppbv.val,
                     bands: meta.bands.clone(),
-                    brightness: args.brightness,
-                    contrast: args.contrast,
                     remap,
                     data,
                 }
@@ -422,8 +418,10 @@ impl TryFrom<&Cli> for Handler {
             numi,
             stem,
             out_dir,
-            size,
             wrappers,
+            size,
+            brightness: args.brightness,
+            contrast: args.contrast,
         })
     }
 }

@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, trace};
 use ndarray::ArrayView2;
 use rayon::prelude::*;
 
@@ -21,7 +21,7 @@ pub struct Pedf {
 
 impl Pedf {
     fn density_call(&self, z: &C32Layout) -> f32 {
-        self.slope * amplitude(z).max(self.eps) + self.constant
+        self.slope * amplitude(z).max(self.eps).log10() + self.constant
     }
     /// Given the raw pixel data, determine remap parameters for a callable remap
     pub fn init(buffer: &[u8], n_rows: impl Into<usize>, n_cols: impl Into<usize>) -> Self {
@@ -35,31 +35,18 @@ impl Pedf {
         let arr = unsafe {
             ArrayView2::from_shape_ptr((n_rows, n_cols), buffer.as_ptr() as *const C32Layout)
         };
-        // Get the mean of the pixel data
-        let mean: f32 = {
-            arr.into_par_iter()
-                .map(|z| {
-                    let amp = amplitude(z);
-                    match amp.is_finite() {
-                        true => Some(amplitude(z)),
-                        false => None,
-                    }
-                })
-                .fold(
-                    || 0_f32,
-                    |a, b| {
-                        if b.is_some() {
-                            a + b.unwrap()
-                        } else {
-                            a
-                        }
-                    },
-                )
-                .sum::<f32>()
-                / n_elem
-        };
+        // Get the mean of the finite pixel data
+        let mean = arr
+            .into_par_iter()
+            .map(|z| match amplitude(z).is_finite() {
+                true => Some(amplitude(z)),
+                false => None,
+            })
+            .fold(|| 0_f32, |a, b| if let Some(v) = b { a + v } else { a })
+            .sum::<f32>()
+            / n_elem;
 
-        dbg!(mean);
+        trace!("PEDF Calcluated mean: {mean}");
 
         let c_l = 0.8 * mean;
         let c_h = mmult * c_l;
@@ -73,15 +60,15 @@ impl Pedf {
             constant,
         }
     }
+
     pub fn remap(&self, z: &C32Layout) -> u8 {
         let density_remap = self.density_call(z);
-        let half = 127_f32;
-        let out = {
-            if density_remap <= half {
-                density_remap
-            } else {
-                0.5 * (density_remap + half)
-            }
+        let half = (u8::MAX / 2) as f32;
+
+        let out = if density_remap <= half {
+            density_remap
+        } else {
+            0.5 * (density_remap + half)
         };
         out as u8
     }
