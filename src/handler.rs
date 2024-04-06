@@ -19,6 +19,11 @@ use crate::cli::Cli;
 use crate::remap::Pedf;
 use crate::{C32Layout, VizError, VizResult};
 
+// TODO:
+//      Need to implement some kind of 'manual' convolutional down-sampling,
+//      in the case of very large data
+//      Construction of a single image from multiple segments
+
 pub struct ImageWrapper {
     /// Number of Significant Rows in image
     pub nrows: u32,
@@ -88,7 +93,7 @@ impl ImageWrapper {
 
         let mut image = RgbaImage::new(ncols, nrows);
 
-        // If the image is not 'banded',
+        // If the image is not 'blocked',
         if self.nbpr == 1 && self.nbpc == 1 {
             match self.irep {
                 ImageRepresentation::MONO => self.read_mono(&mut image),
@@ -97,7 +102,6 @@ impl ImageWrapper {
                 ImageRepresentation::NODISPLY => self.read_nodisplay(&mut image),
                 unimpl => Err(VizError::Irep(unimpl)),
             }?;
-            // self.pedf(&mut image)?;
             return Ok(image);
         }
         let byte_per_px = (self.nbpp / 8) as u32;
@@ -125,14 +129,9 @@ impl ImageWrapper {
             .try_for_each(|(block, chunk)| {
                 match self.irep {
                     ImageRepresentation::MONO => self.blocked_read_mono(chunk, block, &mut image),
-                    // ImageRepresentation::RGB => self.read_rgb(data, subimage),
-                    // ImageRepresentation::RGBLUT => self.read_rgb_lut(data, subimage),
-                    // ImageRepresentation::NODISPLY => self.read_nodisplay(data, subimage),
                     unimpl => Err(VizError::Irep(unimpl)),
                 }
             })?;
-
-        // self.pedf(&mut image)?;
 
         Ok(image)
     }
@@ -433,7 +432,7 @@ pub fn run(args: &Cli) -> VizResult<()> {
     if obj.numi == 1 {
         obj.single_segment(0, stem)?;
     } else {
-        // num1 > 1
+        // numi > 1
         if args.individual {
             for i_seg in 0..obj.numi {
                 obj.single_segment(i_seg.into(), &format!("{stem}_{i_seg}"))?;
