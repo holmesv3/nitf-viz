@@ -176,12 +176,12 @@ impl ImageWrapper {
 
         // Make thumbnail
         let aspect = self.ncols as f32 / self.nrows as f32;
-        debug!("Original dimensions: {} X {}", self.ncols, self.nrows);
+        debug!("Original dimensions: {} X {}", self.nrows, self.ncols);
 
         let max_size = size.pow(2) as f32;
         let new_width = (aspect * max_size).sqrt() as u32;
         let new_height = (max_size / new_width as f32) as u32;
-        debug!("Thumbnail dimensions: {new_width} X {new_height}");
+        debug!("Thumbnail dimensions: {new_height} X {new_width}");
         Ok(thumbnail(&image, new_width, new_height))
     }
 
@@ -272,10 +272,10 @@ impl ImageWrapper {
         let slice_len = data.len() / 8;
         let new_slice = unsafe { slice::from_raw_parts(recast, slice_len) };
         trace!(
-            "Recast to from data length {} bytes to {} X {} bytes",
+            "Recast from data length {} bytes to {} X {} bytes",
             data.len(),
             slice_len,
-            64
+            8
         );
         debug!("Start complex pixel remap");
         new_slice
