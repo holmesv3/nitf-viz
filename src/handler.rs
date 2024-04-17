@@ -78,21 +78,21 @@ impl ImageWrapper {
 
         let ncols = {
             if block_per_row < 1 {
-                block_per_row * block_width
-            } else {
                 self.ncols
+            } else {
+                block_per_row * block_width
             }
         };
         let nrows = {
             if block_per_col < 1 {
-                block_per_col * block_height
-            } else {
                 self.nrows
+            } else {
+                block_per_col * block_height
             }
         };
 
         let mut image = RgbaImage::new(ncols, nrows);
-
+        debug!("Actual image dims: {:?}", image.dimensions());
         // If the image is not 'blocked',
         if self.nbpr == 1 && self.nbpc == 1 {
             match self.irep {
@@ -127,6 +127,7 @@ impl ImageWrapper {
             .iter()
             .zip(data_chunks)
             .try_for_each(|(block, chunk)| {
+                trace!("{block:?}");
                 match self.irep {
                     ImageRepresentation::MONO => self.blocked_read_mono(chunk, block, &mut image),
                     unimpl => Err(VizError::Irep(unimpl)),
