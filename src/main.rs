@@ -9,11 +9,11 @@ mod cli;
 mod handler;
 mod image_wrapper;
 mod remap;
-mod woof;
+mod proto;
 
 use cli::Cli;
 use handler::run;
-use woof::run as HERE_WE_GO;
+use proto::run as HERE_WE_GO;
 
 pub(crate) type C32Layout = [[u8; 4]; 2];
 pub type VizResult<T> = Result<T, VizError>;
