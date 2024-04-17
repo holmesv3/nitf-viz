@@ -4,18 +4,24 @@ use log::LevelFilter;
 use nitf_rs::headers::image_hdr::ImageRepresentation;
 use simple_logger::SimpleLogger;
 use thiserror::Error;
+
 mod cli;
 mod handler;
+mod image_wrapper;
 mod remap;
+mod woof;
 
 use cli::Cli;
 use handler::run;
+use woof::run as HERE_WE_GO;
 
 pub(crate) type C32Layout = [[u8; 4]; 2];
 pub type VizResult<T> = Result<T, VizError>;
 
 #[derive(Error, Debug)]
 pub enum VizError {
+    #[error("Something is bad")]
+    DoBetter,
     #[error("Nitf ImageRepresentation::{0} is not implemented")]
     Irep(ImageRepresentation),
     #[error("Non 8-bit-aligned data is not implemented")]
@@ -42,5 +48,9 @@ fn main() {
         .unwrap();
 
     // This function wraps all program logic
-    run(&args).unwrap();
+    if args.prototype {
+        HERE_WE_GO(&args).unwrap()
+    } else {
+        run(&args).unwrap()
+    };
 }

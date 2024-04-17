@@ -4,7 +4,7 @@ use rayon::prelude::*;
 
 use crate::C32Layout;
 
-fn amplitude(z: &C32Layout) -> f32 {
+pub fn amplitude(z: &C32Layout) -> f32 {
     let real = f32::from_be_bytes(z[0]);
     let imag = f32::from_be_bytes(z[1]);
     (real.powi(2) + imag.powi(2))
@@ -12,11 +12,11 @@ fn amplitude(z: &C32Layout) -> f32 {
         .clamp(f32::MIN, f32::MAX)
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct Pedf {
-    eps: f32,
-    slope: f32,
-    constant: f32,
+    pub eps: f32,
+    pub slope: f32,
+    pub constant: f32,
 }
 
 impl Pedf {
@@ -36,15 +36,7 @@ impl Pedf {
             ArrayView2::from_shape_ptr((n_rows, n_cols), buffer.as_ptr() as *const C32Layout)
         };
         // Get the mean of the finite pixel data
-        let mean = arr
-            .into_par_iter()
-            .map(|z| match amplitude(z).is_finite() {
-                true => Some(amplitude(z)),
-                false => None,
-            })
-            .fold(|| 0_f32, |a, b| if let Some(v) = b { a + v } else { a })
-            .sum::<f32>()
-            / n_elem;
+        let mean = arr.into_par_iter().map(amplitude).sum::<f32>() / n_elem;
 
         trace!("PEDF Calcluated mean: {mean}");
 

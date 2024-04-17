@@ -38,17 +38,17 @@ pub struct Cli {
     pub input: PathBuf,
 
     /// Output folder
-    #[arg(short, long, default_value = ".")]
+    #[arg(long, default_value = ".")]
     pub output: PathBuf,
 
     /// sqrt(thumbnail size) e.g., -s 50 -> 50^2 pixel image
     ///
-    /// Aspect ratio will be preserved when writing
-    #[arg(short, long, default_value = "512")]
+    /// Aspect ratio of input data will be preserved when writing
+    #[arg(long, default_value = "512")]
     pub size: u32,
 
     /// Render multi-segment data as individual images instead of a gif
-    #[arg(short, long, action)]
+    #[arg(long, action)]
     pub individual: bool,
 
     /// Log level. Choices are off, error, warn, info, debug, or trace
@@ -60,10 +60,14 @@ pub struct Cli {
     pub nitf_log: bool,
 
     /// Manual brightness adjustment (i32)
-    #[arg(short, long, default_value = "0")]
+    #[arg(long, default_value = "0", allow_hyphen_values = true)]
     pub brightness: i32,
 
     /// Manual contrast adjustment (f32)
-    #[arg(short, long, default_value = "0")]
+    #[arg(long, default_value = "0", allow_hyphen_values = true)]
     pub contrast: f32,
+
+    /// Use prototype/beta processing
+    #[arg(long, action)]
+    pub prototype: bool,
 }
