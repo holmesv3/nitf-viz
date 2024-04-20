@@ -5,13 +5,12 @@ use image::{
     Frame, RgbaImage,
 };
 use log::{debug, info};
-use nitf_rs::headers::image_hdr::*;
 use nitf_rs::Nitf;
 use std::fs::File;
 
 use crate::cli::Cli;
 use crate::image_wrapper::ImageWrapper;
-use crate::remap::Pedf;
+use crate::sicd::run as run_sicd;
 use crate::{VizError, VizResult};
 
 // #[derive(Debug, Clone)]
@@ -23,6 +22,8 @@ pub struct Handler {
     pub numi: u16,
     /// Inpuf file name
     pub stem: String,
+    /// Input file path
+    pub input: std::path::PathBuf,
     /// Output directory
     pub out_dir: std::path::PathBuf,
     /// Output image(s) size
@@ -50,7 +51,7 @@ impl Handler {
         Ok(image)
     }
     pub fn single_segment(&self, i_seg: usize, stem: &str) -> VizResult<()> {
-        let out_file = self.out_dir.join(format!("{}_{}.png", stem, self.size));
+        let out_file = self.out_dir.join(format!("{stem}.png"));
         let image = self.get_image(i_seg)?;
         image.save(&out_file)?;
         info!("Finished writing {}", out_file.to_str().unwrap());
@@ -58,7 +59,7 @@ impl Handler {
     }
 
     pub fn multi_segment(&self, stem: &str) -> VizResult<()> {
-        let out_file = self.out_dir.join(format!("{}_{}.gif", stem, self.size));
+        let out_file = self.out_dir.join(format!("{stem}.gif"));
         let gif_file = File::create(&out_file)?;
 
         let mut encoder = GifEncoder::new_with_speed(gif_file, 1);
@@ -77,12 +78,16 @@ impl Handler {
 impl TryFrom<&Cli> for Handler {
     type Error = VizError;
     fn try_from(args: &Cli) -> VizResult<Self> {
-        let stem = args
-            .input
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .unwrap()
-            .to_string();
+        let stem = match &args.prefix {
+            Some(stem) => stem.clone(),
+            None => args
+                .input
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap()
+                .to_string(),
+        };
+
         let size = args.size;
         let out_dir = args.output.clone();
 
@@ -106,15 +111,6 @@ impl TryFrom<&Cli> for Handler {
             .map(|seg| {
                 let meta = &seg.header;
                 let data = seg.get_data_map(&mut nitf_file).unwrap();
-
-                let remap = match meta.irep.val {
-                    ImageRepresentation::NODISPLY => Some(Pedf::init(
-                        &data,
-                        meta.nrows.val as usize,
-                        meta.ncols.val as usize,
-                    )),
-                    _ => None,
-                };
                 ImageWrapper {
                     nrows: meta.nrows.val,
                     ncols: meta.ncols.val,
@@ -130,7 +126,6 @@ impl TryFrom<&Cli> for Handler {
                     nppbh: meta.nppbh.val,
                     nppbv: meta.nppbv.val,
                     bands: meta.bands.clone(),
-                    remap,
                     data,
                 }
             })
@@ -142,6 +137,7 @@ impl TryFrom<&Cli> for Handler {
             out_dir,
             wrappers,
             size,
+            input: args.input.clone(),
             brightness: args.brightness,
             contrast: args.contrast,
         })
@@ -151,18 +147,17 @@ impl TryFrom<&Cli> for Handler {
 pub fn run(args: &Cli) -> VizResult<()> {
     let obj: Handler = args.try_into()?;
     let stem = &obj.stem;
+
+    let is_sicd = sicd_rs::read_sicd(&args.input).is_ok();
+    if is_sicd {
+        run_sicd(obj)?;
+    }
     // Only dealing with a single image.
-    if obj.numi == 1 {
+    else if obj.numi == 1 {
         obj.single_segment(0, stem)?;
     } else {
         // numi > 1
-        if args.individual {
-            for i_seg in 0..obj.numi {
-                obj.single_segment(i_seg.into(), &format!("{stem}_{i_seg}"))?;
-            }
-        } else {
-            obj.multi_segment(stem)?;
-        }
+        obj.multi_segment(stem)?;
     }
     Ok(())
 }

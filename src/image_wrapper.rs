@@ -1,13 +1,11 @@
 //! Definition of image reading/writing logic
-use core::slice;
 use image::{imageops::thumbnail, Rgba, RgbaImage};
 use log::{debug, error, trace};
 use memmap2::Mmap;
 use nitf_rs::headers::image_hdr::*;
 use rayon::prelude::*;
 
-use crate::remap::Pedf;
-use crate::{C32Layout, VizError, VizResult};
+use crate::{VizError, VizResult};
 
 pub struct ImageWrapper {
     /// Number of Significant Rows in image
@@ -40,8 +38,6 @@ pub struct ImageWrapper {
     pub nppbv: u16,
     /// Data on disk
     pub data: Mmap,
-    /// Remap function
-    pub remap: Option<Pedf>,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -86,7 +82,6 @@ impl ImageWrapper {
                 ImageRepresentation::MONO => self.read_mono(&mut image),
                 ImageRepresentation::RGB => self.read_rgb(&mut image),
                 ImageRepresentation::RGBLUT => self.read_rgb_lut(&mut image),
-                ImageRepresentation::NODISPLY => self.read_nodisplay(&mut image),
                 unimpl => Err(VizError::Irep(unimpl)),
             }?;
             return Ok(image);
@@ -247,31 +242,6 @@ impl ImageWrapper {
                 let idx = *data as usize;
                 *px = Rgba([lut[r][idx], lut[g][idx], lut[b][idx], u8::MAX]);
             });
-        Ok(())
-    }
-
-    /// For now, assume NODISPLY imagery is SICD (Complex32) and plot magnitude
-    fn read_nodisplay(&self, image: &mut RgbaImage) -> VizResult<()> {
-        let data = &self.data;
-        let recast = data.as_ptr() as *const C32Layout;
-        let slice_len = data.len() / 8;
-        let new_slice = unsafe { slice::from_raw_parts(recast, slice_len) };
-        trace!(
-            "Recast from data length {} bytes to {} X {} bytes",
-            data.len(),
-            slice_len,
-            8
-        );
-        debug!("Start complex pixel remap");
-        new_slice
-            .into_par_iter()
-            .zip(image.par_pixels_mut())
-            .for_each(|(data, px)| {
-                let val = self.remap.unwrap().remap(data);
-                *px = Rgba([val, val, val, u8::MAX]);
-            });
-
-        debug!("Done remapping");
         Ok(())
     }
 }

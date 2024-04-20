@@ -8,8 +8,7 @@ use thiserror::Error;
 mod cli;
 mod handler;
 mod image_wrapper;
-mod remap;
-mod proto;
+mod sicd;
 
 use cli::Cli;
 use handler::run;
@@ -48,9 +47,5 @@ fn main() {
         .unwrap();
 
     // This function wraps all program logic
-    if args.prototype {
-        HERE_WE_GO(&args).unwrap()
-    } else {
-        run(&args).unwrap()
-    };
+    run(&args).unwrap()
 }

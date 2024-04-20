@@ -1,18 +1,20 @@
 [package]
-name = "nitf-viz"
+name = "nitv"
 version = "0.1.0"
 edition = "2021"
+description = "NITF Visualizer"
+homepage = "https://github.com/holmesv3/nitf-viz"
 license = "MIT"
 readme = "README.md"
 
 [dependencies]
 log = "0.4.21"
 simple_logger = "4.3.3"
-image = { version = "0.25.0", features = ["gif", "rayon"] }
+image = { version = "0.25.0", features = ["png", "gif", "rayon"], default-features = false}
 clap = { version = "4.5.3", features = ["derive"]}
-nitf-rs = {git = "https://github.com/holmesv3/nitf-rs"}
+nitf-rs = { version = "0.3.1" }
 memmap2 = "0.5.10"
 ndarray = { version = "0.15.6", features = ["rayon"] }
 thiserror = "1.0.58"
 rayon = "1.10.0"
-sicd-rs = { git = "https://github.com/holmesv3/sicd-rs"}
+sicd-rs = { version = "0.2.1" }

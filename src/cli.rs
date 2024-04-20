@@ -34,40 +34,36 @@ impl From<Level> for LevelFilter {
 /// Write out the image data from a NITF file.
 #[derive(Parser, Debug)]
 pub struct Cli {
-    /// Input file
+    /// Input NITF file
     pub input: PathBuf,
 
     /// Output folder
     #[arg(long, default_value = ".")]
     pub output: PathBuf,
 
-    /// sqrt(thumbnail size) e.g., -s 50 -> 50^2 pixel image
+    /// Output file name. Derived from input if not given.
+    #[arg(short, long)]
+    pub prefix: Option<String>,
+
+    /// sqrt(num-pixels) e.g., --size 50 -> 50^2 pixel image
     ///
     /// Aspect ratio of input data will be preserved when writing
-    #[arg(long, default_value = "512")]
+    #[arg(short, long, default_value = "256")]
     pub size: u32,
 
-    /// Render multi-segment data as individual images instead of a gif
-    #[arg(long, action)]
-    pub individual: bool,
+    /// Adjust the brightness of the image product (32-bit signed integer)
+    #[arg(short, long, default_value = "0", allow_hyphen_values = true)]
+    pub brightness: i32,
 
-    /// Log level. Choices are off, error, warn, info, debug, or trace
+    /// Adjust the contrast of the image product (32-bit float)
+    #[arg(short, long, default_value = "0", allow_hyphen_values = true)]
+    pub contrast: f32,
+
+    /// Log level
     #[arg(long, default_value = "info")]
     pub level: Level,
 
     /// Enable logging for nitf reading
     #[arg(long, action)]
     pub nitf_log: bool,
-
-    /// Manual brightness adjustment (i32)
-    #[arg(long, default_value = "0", allow_hyphen_values = true)]
-    pub brightness: i32,
-
-    /// Manual contrast adjustment (f32)
-    #[arg(long, default_value = "0", allow_hyphen_values = true)]
-    pub contrast: f32,
-
-    /// Use prototype/beta processing
-    #[arg(long, action)]
-    pub prototype: bool,
 }
