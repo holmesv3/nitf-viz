@@ -12,7 +12,6 @@ mod sicd;
 
 use cli::Cli;
 use handler::run;
-use proto::run as HERE_WE_GO;
 
 pub(crate) type C32Layout = [[u8; 4]; 2];
 pub type VizResult<T> = Result<T, VizError>;
