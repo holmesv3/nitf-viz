@@ -110,6 +110,7 @@ impl ImageWrapper {
             .zip(data_chunks)
             .try_for_each(|(block, chunk)| match self.irep {
                 ImageRepresentation::MONO => self.blocked_read_mono(chunk, block, &mut image),
+                ImageRepresentation::RGBLUT => self.blocked_read_rgblut(chunk, block, &mut image),
                 unimpl => Err(VizError::Irep(unimpl)),
             })?;
 
@@ -209,6 +210,48 @@ impl ImageWrapper {
         let block_iter = block_iter.iter().cloned();
         for (data, (x, y)) in data.iter().zip(block_iter) {
             image.put_pixel(x, y, Rgba([*data, *data, *data, alpha(x, y)]));
+        }
+
+        Ok(())
+    }
+
+    /// Read an rgblut represented image. Currently assumes all data is a single byte
+    fn blocked_read_rgblut(
+        &self,
+        data: &[u8],
+        block: &BlockInfo,
+        image: &mut RgbaImage,
+    ) -> VizResult<()> {
+        // Make values outside of "significant" image data transparent
+        let alpha = |x: u32, y: u32| {
+            if x >= self.ncols || y >= self.nrows {
+                u8::MIN
+            } else {
+                u8::MAX
+            }
+        };
+
+        if self.nbpp != 8 {
+            return Err(VizError::Nbpp);
+        };
+
+        let mut block_iter = vec![(0_u32, 0_u32); (block.width * block.height) as usize];
+        for (i_y, y) in (block.y..(block.y + block.height)).enumerate() {
+            for (i_x, x) in (block.x..(block.x + block.width)).enumerate() {
+                block_iter[i_x + i_y * block.width as usize] = (x, y)
+            }
+        }
+
+        let (r, g, b) = (0, 1, 2);
+        let lut = &self.bands[0].lutd;
+        let block_iter = block_iter.iter().cloned();
+        for (data, (x, y)) in data.iter().zip(block_iter) {
+            let idx = *data as usize;
+            image.put_pixel(
+                x,
+                y,
+                Rgba([lut[r][idx], lut[g][idx], lut[b][idx], alpha(x, y)]),
+            );
         }
 
         Ok(())

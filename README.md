@@ -25,11 +25,11 @@ There are a handful of options available
 
 ## Current support (files from [Umbra's Open Data](https://umbra.space/open-data/))
 ### SIDD / monochrome
-![SIDD product example](./images/sidd.png)
+![SIDD product example](./images/sidd.png =256x256)
 ### RGB/RGB + LUT
-![RGB product example](./images/rgb.png)
+![RGB product example](./images/rgb.png =256x256)
 ### SICD / complex-data
-![SICD product example](./images/sicd.png)
+![SICD product example](./images/sicd.png =256x256)
 
 
 ## Implementation details:
