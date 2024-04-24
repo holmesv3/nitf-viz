@@ -103,13 +103,14 @@ impl ImageWrapper {
                 };
             }
         }
-        let chunk_size = (byte_per_px * block_width * block_height) as usize;
+        let chunk_size = (byte_per_px * block_width * block_height * self.nbands as u32) as usize;
         let data_chunks = self.data.chunks_exact(chunk_size);
         block_info
             .iter()
             .zip(data_chunks)
             .try_for_each(|(block, chunk)| match self.irep {
                 ImageRepresentation::MONO => self.blocked_read_mono(chunk, block, &mut image),
+                ImageRepresentation::RGB => self.blocked_read_rgb(chunk, block, &mut image),
                 ImageRepresentation::RGBLUT => self.blocked_read_rgblut(chunk, block, &mut image),
                 unimpl => Err(VizError::Irep(unimpl)),
             })?;
@@ -215,6 +216,46 @@ impl ImageWrapper {
         Ok(())
     }
 
+    /// Read an rgb represented image
+    fn blocked_read_rgb(
+        &self,
+        data: &[u8],
+        block: &BlockInfo,
+        image: &mut RgbaImage,
+    ) -> VizResult<()> {
+        // Make values outside of "significant" image data transparent
+        let alpha = |x: u32, y: u32| {
+            if x >= self.ncols || y >= self.nrows {
+                u8::MIN
+            } else {
+                u8::MAX
+            }
+        };
+
+        if self.nbpp != 8 {
+            return Err(VizError::Nbpp);
+        };
+
+        let mut block_iter = vec![(0_u32, 0_u32); (block.width * block.height) as usize];
+        for (i_y, y) in (block.y..(block.y + block.height)).enumerate() {
+            for (i_x, x) in (block.x..(block.x + block.width)).enumerate() {
+                block_iter[i_x + i_y * block.width as usize] = (x, y)
+            }
+        }
+
+        let (r, g, b) = (0, 1, 2);
+        let block_iter = block_iter.iter().cloned();
+        for (data, (x, y)) in data.chunks_exact(3).zip(block_iter) {
+            image.put_pixel(
+                x,
+                y,
+                Rgba([data[r], data[g], data[b], alpha(x, y)]),
+            );
+        }
+
+        Ok(())
+    }
+    
     /// Read an rgblut represented image. Currently assumes all data is a single byte
     fn blocked_read_rgblut(
         &self,
