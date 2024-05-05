@@ -3,7 +3,7 @@ name = "nitv"
 version = "0.1.2"
 edition = "2021"
 description = "NITF Visualizer"
-homepage = "https://github.com/holmesv3/nitf-viz"
+repository = "https://github.com/holmesv3/nitf-viz"
 license = "MIT"
 readme = "README.md"
 
