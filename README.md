@@ -8,17 +8,14 @@ First, install from clone or directly using `cargo`...
 ```sh
 cargo install nitv
 ```
-... then provide a NITF file
+... then provide a NITF file(s)
 ```sh
-nitv <path-to-nitf>
+nitv <path-to-nitf>(s)
 ```
 There are a handful of options available
 ```
 --output      Output folder [default: .]
---prefix      Output file name. Derived from input if not given
 --size        sqrt(num-pixels) e.g., --size 50 -> 50^2 pixel image [default: 256]
---brightness  Adjust the brightness of the image product (32-bit signed integer) [default: 0]
---contrast    Adjust the contrast of the image product (32-bit float) [default: 0]
 --level       Log level [default: info] [possible values: off, error, warn, info, debug, trace]
 --nitf-log    Enable logging for nitf reading
 ```
