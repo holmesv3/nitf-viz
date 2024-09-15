@@ -292,15 +292,6 @@ pub fn run(handler: Handler) -> VizResult<()> {
             *px = Rgba([data, data, data, u8::MAX]);
         });
 
-    if handler.brightness != 0 {
-        debug!("Adjusting brightness");
-        brighten_in_place(&mut image, handler.brightness);
-    }
-    if handler.contrast != 0.0 {
-        debug!("Adjusting contrast");
-        contrast_in_place(&mut image, handler.contrast);
-    }
-
     let out_file = out_dir.join(format!("{stem}.png"));
     image.save(&out_file)?;
     info!("Finished writing {}", out_file.to_str().unwrap());

@@ -34,30 +34,18 @@ impl From<Level> for LevelFilter {
 /// Write out the image data from a NITF file.
 #[derive(Parser, Debug)]
 pub struct Cli {
-    /// Input NITF file
-    pub input: PathBuf,
+    /// Input NITF file(s)
+    pub input: Vec<PathBuf>,
 
     /// Output folder
     #[arg(long, default_value = ".")]
     pub output: PathBuf,
-
-    /// Output file name. Derived from input if not given.
-    #[arg(short, long)]
-    pub prefix: Option<String>,
 
     /// sqrt(num-pixels) e.g., --size 50 -> 50^2 pixel image
     ///
     /// Aspect ratio of input data will be preserved when writing
     #[arg(short, long, default_value = "256")]
     pub size: u32,
-
-    /// Adjust the brightness of the image product (32-bit signed integer)
-    #[arg(short, long, default_value = "0", allow_hyphen_values = true)]
-    pub brightness: i32,
-
-    /// Adjust the contrast of the image product (32-bit float)
-    #[arg(short, long, default_value = "0", allow_hyphen_values = true)]
-    pub contrast: f32,
 
     /// Log level
     #[arg(long, default_value = "info")]
