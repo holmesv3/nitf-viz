@@ -1,26 +1,28 @@
 //! Definition of image reading/writing logic
-use image::{
-    codecs::gif::{GifEncoder, Repeat},
-    imageops::colorops::{brighten_in_place, contrast_in_place},
-    Frame, RgbaImage,
-};
-use log::{debug, info};
-use nitf_rs::Nitf;
 use std::fs::File;
 
-use crate::cli::Cli;
-use crate::image_wrapper::ImageWrapper;
-use crate::sicd::run as run_sicd;
-use crate::{VizError, VizResult};
+use quick_xml::events::Event;
 
-// #[derive(Debug, Clone)]
-// pub struct ImageConfig {}
+use log::debug;
+
+use nitf_rs::headers::image_hdr::ImageRepresentation;
+use nitf_rs::Nitf;
+
+use crate::cli::Cli;
+use crate::sicd::make_sicd;
+use crate::sidd::make_sidd;
+use crate::VizResult;
+
+/// Specialized inputs
+pub enum InputType {
+    SICD,
+    SIDD,
+    Other,
+}
 
 /// Top level handler for all program logic
 pub struct Handler {
-    /// Number of image segments
-    pub numi: u16,
-    /// Inpuf file name
+    /// Input file name
     pub stem: String,
     /// Input file path
     pub input: std::path::PathBuf,
@@ -28,17 +30,20 @@ pub struct Handler {
     pub out_dir: std::path::PathBuf,
     /// Output image(s) size
     pub size: u32,
-    /// Images
-    pub wrappers: Vec<ImageWrapper>,
+    /// Input type
+    pub input_type: InputType,
+    /// Pixel type
+    pub pix_type: ImageRepresentation,
 }
 
-fn init_handler(input: &std::path::PathBuf, args: &Cli) -> VizResult<Handler> {
-    let stem = input
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .unwrap()
-                .to_string();
-        
+/// Takes care of all reading, parsing, and writing work
+impl Handler {
+    pub fn run(input: &std::path::PathBuf, args: &Cli) -> VizResult<String> {
+        let stem = input
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap()
+            .to_string();
 
         let size = args.size;
         let out_dir = args.output.clone();
@@ -54,96 +59,53 @@ fn init_handler(input: &std::path::PathBuf, args: &Cli) -> VizResult<Handler> {
         debug!("Reading {:}", input.to_str().unwrap());
         let mut nitf_file = File::open(input.clone())?;
         let nitf = Nitf::from_reader(&mut nitf_file)?;
-        let numi = nitf.nitf_header.numi.val;
-        debug!("Found numi = {numi}");
+        let im_hdr = &nitf.image_segments[0].header;
 
-        let wrappers = nitf
-            .image_segments
-            .iter()
-            .map(|seg| {
-                let meta = &seg.header;
-                let data = seg.get_data_map(&mut nitf_file).unwrap();
-                ImageWrapper {
-                    nrows: meta.nrows.val,
-                    ncols: meta.ncols.val,
-                    pvtype: meta.pvtype.val,
-                    ic: meta.ic.val,
-                    nbpp: meta.nbpp.val,
-                    abpp: meta.abpp.val,
-                    nbands: meta.nbands.val,
-                    irep: meta.irep.val,
-                    nbpc: meta.nbpc.val,
-                    nbpr: meta.nbpr.val,
-                    imode: meta.imode.val,
-                    nppbh: meta.nppbh.val,
-                    nppbv: meta.nppbv.val,
-                    bands: meta.bands.clone(),
-                    data,
-                }
-            })
-            .collect();
+        // Determine input type WIP
+        let mut input_type = InputType::Other;
 
-        Ok(Handler {
-            numi,
+        // Check for XML
+        if nitf.nitf_header.numdes.val > 0 {
+            let xml = nitf.data_extension_segments[0].get_data_map(&mut nitf_file)?;
+            let mut reader = quick_xml::Reader::from_str(std::str::from_utf8(&xml[..100])?);
+            input_type = reader.read_event().map(|event| match event {
+                Event::Start(e) => match e.name().as_ref() {
+                    b"SICD" => InputType::SICD,
+                    b"SIDD" => InputType::SIDD,
+                    _ => InputType::Other,
+                },
+                _ => InputType::Other,
+            })?;
+        }
+
+        let obj = Self {
             stem,
             out_dir,
-            wrappers,
             size,
             input: input.clone(),
-        })
-}
-
-/// Takes care of all reading, parsing, and writing work
-impl Handler {
-    fn init() {
-        
-    }
-    fn get_image(&self, i_seg: usize) -> VizResult<RgbaImage> {
-        self.wrappers[i_seg].get_image(self.size)
-    }
-    pub fn single_segment(&self, i_seg: usize, stem: &str) -> VizResult<()> {
-        let out_file = self.out_dir.join(format!("{stem}.png"));
-        let image = self.get_image(i_seg)?;
-        image.save(&out_file)?;
-        info!("Finished writing {}", out_file.to_str().unwrap());
-        Ok(())
-    }
-
-    pub fn multi_segment(&self, stem: &str) -> VizResult<()> {
-        let out_file = self.out_dir.join(format!("{stem}.gif"));
-        let gif_file = File::create(&out_file)?;
-
-        let mut encoder = GifEncoder::new_with_speed(gif_file, 1);
-        let _ = encoder.set_repeat(Repeat::Infinite);
-        for i_seg in 0..self.numi {
-            let image = self.get_image(i_seg.into())?;
-            info!("Writing frame {} of {}", i_seg + 1, self.numi);
-            let frame = Frame::new(image);
-            let _ = encoder.encode_frame(frame);
-        }
-        info!("Finished writing {}", out_file.to_str().unwrap());
-        Ok(())
-    }
-}
-
-pub fn run(args: &Cli) -> VizResult<()> {
-    for input in &args.input
-    {
-        let obj: Handler = init_handler(input, args)?;
-        let stem = &obj.stem;
-    
-        let is_sicd = sicd_rs::read_sicd(&input).is_ok();
-        if is_sicd {
-            run_sicd(obj)?;
-        }
-        // Only dealing with a single image.
-        else if obj.numi == 1 {
-            obj.single_segment(0, stem)?;
-        } else {
-            // numi > 1
-            obj.multi_segment(stem)?;
+            input_type,
+            pix_type: im_hdr.irep.val,
+        };
+        // Only dealing with a single image for now.
+        match &obj.input_type {
+            InputType::SICD => make_sicd(obj),
+            InputType::SIDD => make_sidd(obj),
+            _ => todo!(),
         }
     }
-    Ok(())
 
+    // pub fn multi_segment(&self, stem: String) -> VizResult<String> {
+    //     let out_file = self.out_dir.join(format!("{stem}.gif"));
+    //     let gif_file = File::create(&out_file)?;
+
+    //     let mut encoder = GifEncoder::new_with_speed(gif_file, 1);
+    //     let _ = encoder.set_repeat(Repeat::Infinite);
+    //     for i_seg in 0..self.numi {
+    //         let image = self.get_image(i_seg.into())?;
+    //         info!("Writing frame {} of {}", i_seg + 1, self.numi);
+    //         let frame = Frame::new(image);
+    //         let _ = encoder.encode_frame(frame);
+    //     }
+    //     Ok(out_file.to_str().unwrap().to_string())
+    // }
 }
