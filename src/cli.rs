@@ -43,8 +43,9 @@ pub struct Cli {
 
     /// sqrt(num-pixels) e.g., --size 50 -> 50^2 pixel image
     ///
-    /// Aspect ratio of input data will be preserved when writing
-    #[arg(short, long, default_value = "256")]
+    /// Aspect ratio of input data will be preserved when writing.
+    /// If 0, will be 'native' resolution of data
+    #[arg(long, default_value = "256")]
     pub size: u32,
 
     /// Log level
