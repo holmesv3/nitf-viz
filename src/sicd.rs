@@ -168,13 +168,10 @@ pub fn make_sicd(handler: Handler) -> VizResult<String> {
     debug!("\t SCPCOA.TwistAng = {}", twist.to_radians());
     debug!("Found SICD resolution {row_res} X {col_res}");
 
-    // let aspect = (n_cols as f64 ) / (n_rows as f64 );
-    let aspect = (n_cols as f64 * col_res) / (n_rows as f64 * row_res);
-
-    let max_size = handler.size.pow(2) as f64;
-    let out_cols = (aspect * max_size).sqrt() as u32;
-    let out_rows = (max_size / out_cols as f64) as u32;
-
+    let (out_rows, out_cols) = handler.calc_size(
+        (n_rows as f64 * row_res) as f32,
+        (n_cols as f64 * col_res) as f32,
+    );
     let x_ratio = n_cols as f32 / out_cols as f32;
     let y_ratio = n_rows as f32 / out_rows as f32;
 
@@ -188,19 +185,19 @@ pub fn make_sicd(handler: Handler) -> VizResult<String> {
             let bottomf = outy as f32 * y_ratio;
             let topf = bottomf + y_ratio;
 
-            let bottom = (bottomf.ceil() as u32).clamp(0, n_rows - 1);
-            let top = (topf.ceil() as u32).clamp(bottom, n_rows);
+            let bottom = (bottomf.ceil() as u32).clamp(0, n_rows - 1) as usize;
+            let top = topf.ceil().clamp(bottom as f32, n_rows as f32) as usize;
             let leftf = outx as f32 * x_ratio;
             let rightf = leftf + x_ratio;
 
-            let left = (leftf.ceil() as u32).clamp(0, n_cols - 1);
-            let right = (rightf.ceil() as u32).clamp(left, n_cols);
+            let left = leftf.ceil().clamp(0_f32, (n_cols - 1) as f32) as usize;
+            let right = rightf.ceil().clamp(left as f32, n_cols as f32) as usize;
 
             if bottom != top && left != right {
                 let n = ((top - bottom) * (right - left)) as f32;
                 let mut res = 0_f32;
-                for i_row in bottom as usize..top as usize {
-                    for i_col in left as usize..right as usize {
+                for i_row in bottom..top {
+                    for i_col in left..right {
                         res += pedf.remap(&stack[[i_row, i_col]]) as f32
                     }
                 }
@@ -210,9 +207,9 @@ pub fn make_sicd(handler: Handler) -> VizResult<String> {
 
                 let mut sum_left = 0_u32;
                 let mut sum_right = 0_u32;
-                for x in bottom as usize..top as usize {
-                    sum_left += pedf.remap(&stack[[x, left as usize]]) as u32;
-                    sum_right += pedf.remap(&stack[[x, left as usize + 1]]) as u32;
+                for x in bottom..top {
+                    sum_left += pedf.remap(&stack[[x, left]]) as u32;
+                    sum_right += pedf.remap(&stack[[x, left + 1]]) as u32;
                 }
 
                 // Now we approximate: left/n*(1-fract) + right/n*fract
@@ -221,14 +218,13 @@ pub fn make_sicd(handler: Handler) -> VizResult<String> {
 
                 *elem = Luma([(fact_left * sum_left as f32 + fact_right * sum_right as f32) as u8]);
             } else if left != right {
-                let fraction_vertical = (topf.fract() + bottomf.fract()) / 2.;
-                let fract = fraction_vertical;
+                let fract = (topf.fract() + bottomf.fract()) / 2.;
 
                 let mut sum_bot = 0_u32;
                 let mut sum_top = 0_u32;
-                for x in left as usize..right as usize {
-                    sum_bot += pedf.remap(&stack[[bottom as usize, x]]) as u32;
-                    sum_top += pedf.remap(&stack[[bottom as usize + 1, x]]) as u32;
+                for x in left..right {
+                    sum_bot += pedf.remap(&stack[[bottom, x]]) as u32;
+                    sum_top += pedf.remap(&stack[[bottom + 1, x]]) as u32;
                 }
 
                 // Now we approximate: bot/n*fract + top/n*(1-fract)
@@ -238,16 +234,14 @@ pub fn make_sicd(handler: Handler) -> VizResult<String> {
                 *elem = Luma([(fact_bot * sum_bot as f32 + fact_top * sum_top as f32) as u8]);
             } else {
                 // bottom == top && left == right
-                let fraction_horizontal = (topf.fract() + bottomf.fract()) / 2.;
-                let fraction_vertical = (leftf.fract() + rightf.fract()) / 2.;
 
-                let k_bl = pedf.remap(&stack[[bottom as usize, left as usize]]);
-                let k_tl = pedf.remap(&stack[[bottom as usize + 1, left as usize]]);
-                let k_br = pedf.remap(&stack[[bottom as usize, left as usize + 1]]);
-                let k_tr = pedf.remap(&stack[[bottom as usize + 1, left as usize + 1]]);
+                let k_bl = pedf.remap(&stack[[bottom, left]]);
+                let k_tl = pedf.remap(&stack[[bottom + 1, left]]);
+                let k_br = pedf.remap(&stack[[bottom, left + 1]]);
+                let k_tr = pedf.remap(&stack[[bottom + 1, left + 1]]);
 
-                let frac_v = fraction_vertical;
-                let frac_h = fraction_horizontal;
+                let frac_v = (topf.fract() + bottomf.fract()) / 2.;
+                let frac_h = (leftf.fract() + rightf.fract()) / 2.;
 
                 let fact_tr = frac_v * frac_h;
                 let fact_tl = frac_v * (1. - frac_h);
@@ -278,14 +272,12 @@ mod xml {
         let e = reader.read_event()?;
 
         // If the first event we get isn't the SICD tag, something is wrong
-        match e {
-            Event::Start(b) => {
-                if !str::from_utf8(b.name().0)?.contains("SICD") {
-                    return Err(VizError::DoBetter);
-                }
+        if let Event::Start(b) = e {
+            if !str::from_utf8(b.name().0)?.contains("SICD") {
+                return Err(VizError::DoBetter);
             }
-            _ => (),
         }
+
         // Prealloc variables
         let mut row_ss = 0_f64;
         let mut col_ss = 0_f64;
@@ -392,7 +384,7 @@ mod xml {
                 *val = str::from_utf8(txt.as_ref())?.parse().unwrap();
                 Ok(true)
             }
-            _ => return Err(VizError::DoBetter),
+            _ => Err(VizError::DoBetter),
         }
     }
 }

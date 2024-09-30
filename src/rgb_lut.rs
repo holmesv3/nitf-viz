@@ -1,7 +1,7 @@
 //! Definition of image reading/writing logic
 use std::fs::File;
 
-use image::{GrayImage, Luma};
+use image::{Rgb, RgbImage};
 
 use ndarray::parallel::prelude::*;
 use ndarray::ArrayView4;
@@ -11,7 +11,7 @@ use crate::handler::Handler;
 use crate::VizResult;
 use crate::{BlockedPaddedArray, Stack};
 
-pub fn make_mono(handler: Handler) -> VizResult<String> {
+pub fn make_rgb_lut(handler: Handler) -> VizResult<String> {
     let mut nitf_file = File::open(handler.input.clone())?;
     let nitf = Nitf::from_reader(&mut nitf_file)?;
 
@@ -54,6 +54,8 @@ pub fn make_mono(handler: Handler) -> VizResult<String> {
             }
         })
         .collect();
+    // Assumes all LUTs are the same
+    let lut = &nitf.image_segments[0].header.bands[0].lutd;
 
     // This assumes all segments have the same number of columns, and are split along rows
     let n_rows = arrs.iter().fold(0, |acc, arr| acc + arr.n_rows as u32);
@@ -64,8 +66,7 @@ pub fn make_mono(handler: Handler) -> VizResult<String> {
     let (out_rows, out_cols) = handler.calc_size(n_rows as f32, n_cols as f32);
     let x_ratio = n_cols as f32 / out_cols as f32;
     let y_ratio = n_rows as f32 / out_rows as f32;
-
-    let mut image = GrayImage::new(out_cols, out_rows);
+    let mut image = RgbImage::new(out_cols, out_rows);
 
     // TODO: Need to abstract this somehow
     // Zip::indexed(&mut image.p).par_for_each(|(outy, outx), elem| {
@@ -75,61 +76,61 @@ pub fn make_mono(handler: Handler) -> VizResult<String> {
             let bottomf = outy as f32 * y_ratio;
             let topf = bottomf + y_ratio;
 
-            let bottom = (bottomf.ceil() as u32).clamp(0, n_rows - 1);
-            let top = (topf.ceil() as u32).clamp(bottom, n_rows);
+            let bottom = (bottomf.ceil() as u32).clamp(0, n_rows - 1) as usize;
+            let top = topf.ceil().clamp(bottom as f32, n_rows as f32) as usize;
             let leftf = outx as f32 * x_ratio;
             let rightf = leftf + x_ratio;
 
-            let left = (leftf.ceil() as u32).clamp(0, n_cols - 1);
-            let right = (rightf.ceil() as u32).clamp(left, n_cols);
+            let left = (leftf.ceil() as u32).clamp(0, n_cols - 1) as usize;
+            let right = rightf.ceil().clamp(left as f32, n_cols as f32) as usize;
 
             if bottom != top && left != right {
                 let n = ((top - bottom) * (right - left)) as f32;
-                let mut res = 0_f32;
-                for i_row in bottom as usize..top as usize {
-                    for i_col in left as usize..right as usize {
-                        res += stack[[i_row, i_col]] as f32
+                let mut pixel = [0u8; 3];
+                pixel.iter_mut().enumerate().for_each(|(idx, px)| {
+                    let mut sum = 0_f32;
+                    for i_row in bottom..top {
+                        for i_col in left..right {
+                            sum += lut[idx][stack[[i_row, i_col]] as usize] as f32;
+                        }
                     }
-                }
-                *elem = Luma([(res / n) as u8]);
+                    *px = (sum / n) as u8;
+                });
+                *elem = Rgb(pixel);
             } else if bottom != top {
                 let fract = (leftf.fract() + rightf.fract()) / 2.;
-
-                let mut sum_left = 0_f32;
-                let mut sum_right = 0_f32;
-                for x in bottom as usize..top as usize {
-                    sum_left += stack[[x, left as usize]] as f32;
-                    sum_right += stack[[x, left as usize + 1]] as f32;
-                }
-
-                // Now we approximate: left/n*(1-fract) + right/n*fract
                 let fact_right = fract / ((top - bottom) as f32);
                 let fact_left = (1. - fract) / ((top - bottom) as f32);
 
-                *elem = Luma([(fact_left * sum_left + fact_right * sum_right) as u8]);
+                let mut pixel = [0u8; 3];
+                pixel.iter_mut().enumerate().for_each(|(idx, px)| {
+                    let mut sum_left = 0_f32;
+                    let mut sum_right = 0_f32;
+                    for x in bottom..top {
+                        sum_left += lut[idx][stack[[x, left]] as usize] as f32;
+                        sum_right += lut[idx][stack[[x, left + 1]] as usize] as f32;
+                    }
+                    *px = (fact_left * sum_left + fact_right * sum_right) as u8;
+                });
+                *elem = Rgb(pixel);
             } else if left != right {
                 let fract = (topf.fract() + bottomf.fract()) / 2.;
-
-                let mut sum_bot = 0_f32;
-                let mut sum_top = 0_f32;
-                for x in left as usize..right as usize {
-                    sum_bot += stack[[bottom as usize, x]] as f32;
-                    sum_top += stack[[bottom as usize + 1, x]] as f32;
-                }
-
-                // Now we approximate: bot/n*fract + top/n*(1-fract)
                 let fact_top = fract / ((right - left) as f32);
                 let fact_bot = (1. - fract) / ((right - left) as f32);
 
-                *elem = Luma([(fact_bot * sum_bot + fact_top * sum_top) as u8]);
+                let mut pixel = [0u8; 3];
+                pixel.iter_mut().enumerate().for_each(|(idx, px)| {
+                    let mut sum_bot = 0_f32;
+                    let mut sum_top = 0_f32;
+                    for x in left..right {
+                        sum_bot += lut[idx][stack[[bottom, x]] as usize] as f32;
+                        sum_top += lut[idx][stack[[bottom + 1, x]] as usize] as f32;
+                    }
+                    *px = (fact_top * sum_bot + fact_bot * sum_top) as u8;
+                });
+                *elem = Rgb(pixel);
             } else {
                 // bottom == top && left == right
-
-                let k_bl = stack[[bottom as usize, left as usize]];
-                let k_tl = stack[[bottom as usize + 1, left as usize]];
-                let k_br = stack[[bottom as usize, left as usize + 1]];
-                let k_tr = stack[[bottom as usize + 1, left as usize + 1]];
-
                 let frac_h = (leftf.fract() + rightf.fract()) / 2.;
                 let frac_v = (topf.fract() + bottomf.fract()) / 2.;
 
@@ -138,10 +139,15 @@ pub fn make_mono(handler: Handler) -> VizResult<String> {
                 let fact_br = (1. - frac_v) * frac_h;
                 let fact_bl = (1. - frac_v) * (1. - frac_h);
 
-                *elem = Luma([(fact_br * k_br as f32
-                    + fact_tr * k_tr as f32
-                    + fact_bl * k_bl as f32
-                    + fact_tl * k_tl as f32) as u8])
+                let mut pixel = [0u8; 3];
+                pixel.iter_mut().enumerate().for_each(|(idx, px)| {
+                    let k_bl = lut[idx][stack[[bottom, left]] as usize] as f32;
+                    let k_tl = lut[idx][stack[[bottom + 1, left]] as usize] as f32;
+                    let k_br = lut[idx][stack[[bottom, left + 1]] as usize] as f32;
+                    let k_tr = lut[idx][stack[[bottom + 1, left + 1]] as usize] as f32;
+                    *px = (fact_br * k_br + fact_tr * k_tr + fact_bl * k_bl + fact_tl * k_tl) as u8
+                });
+                *elem = Rgb(pixel);
             };
         });
 
